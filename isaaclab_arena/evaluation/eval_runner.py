@@ -32,12 +32,17 @@ if TYPE_CHECKING:
     from isaaclab_arena.policy.policy_base import PolicyBase
 
 
-def load_env(arena_env_args: list[str], job_name: str, render_mode: str | None = None):
+def load_env(
+    arena_env_args: list[str],
+    job_name: str,
+    variations: list[str] | None = None,
+    render_mode: str | None = None,
+):
 
     args_parser = get_isaaclab_arena_environments_cli_parser()
 
     arena_env_args_cli = args_parser.parse_args(arena_env_args)
-    arena_builder = get_arena_builder_from_cli(arena_env_args_cli)
+    arena_builder = get_arena_builder_from_cli(arena_env_args_cli, hydra_overrides=variations)
 
     env_name, env_cfg = arena_builder.build_registered()
 
@@ -48,6 +53,17 @@ def load_env(arena_env_args: list[str], job_name: str, render_mode: str | None =
     env = arena_builder.make_registered(env_cfg, render_mode=render_mode)
     # Don't reset here - rollout_policy() will reset the env. Every reset triggers a new episode, initializing recorder & creating a new hdf5 entry.
     return env
+
+
+def list_variations(eval_jobs_config: dict) -> None:
+    """Print the Hydra-configurable variations for each job's environment."""
+    job_manager = JobManager(eval_jobs_config["jobs"])
+    for job in job_manager.all_jobs:
+        args_parser = get_isaaclab_arena_environments_cli_parser()
+        arena_env_args_cli = args_parser.parse_args(job.arena_env_args)
+        arena_builder = get_arena_builder_from_cli(arena_env_args_cli, hydra_overrides=job.variations)
+        print(f"=== Variations for job '{job.name}' ===", flush=True)
+        print(arena_builder.get_variations_catalogue_as_string(), flush=True)
 
 
 def enable_cameras_if_required(eval_jobs_config: dict, args_cli: argparse.Namespace) -> None:
@@ -207,6 +223,12 @@ def main():
     with open(args_cli.eval_jobs_config, encoding="utf-8") as f:
         eval_jobs_config = json.load(f)
 
+    # Print the variations catalogue for each job's environment and exit.
+    if args_cli.list_variations:
+        with SimulationAppContext(args_cli):
+            list_variations(eval_jobs_config)
+        return
+
     # Chunked dispatch (--chunk_size N). Splits this config across subprocesses so each
     # gets a fresh SimulationApp. Required for long sweeps because some host memory leaks
     # each cycle and is only reclaimed when the process exits — in-process teardown can't
@@ -248,7 +270,7 @@ def main():
             for rebuild_idx in range(job.num_rebuilds):
                 try:
                     render_mode = "rgb_array" if args_cli.video else None
-                    env = load_env(job.arena_env_args, job.name, render_mode=render_mode)
+                    env = load_env(job.arena_env_args, job.name, variations=job.variations, render_mode=render_mode)
 
                     policy = get_policy_from_job(job)
 
