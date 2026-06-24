@@ -35,7 +35,7 @@ def plot_marginals(
     for categorical ones, wrapped into a grid.
 
     Args:
-        samples: ``(num_samples, total_factor_dim)`` posterior draws in the dataset's factor
+        samples: ``(num_samples, num_factors)`` posterior draws in the dataset's factor
             layout (continuous-first, original units), e.g. from ``SensitivityAnalyzer.sample_posterior``.
         dataset: The dataset, for the factor schema and column layout.
         observation: The outcome vector the samples were conditioned on (shown in the title).
@@ -46,7 +46,7 @@ def plot_marginals(
         The matplotlib Figure.
     """
     samples = samples.cpu().numpy()
-    factors = dataset.schema.factors
+    factors = dataset.factors
     # Wrap panels into a grid (at most 3 columns) so many factors stay readable.
     num_columns = min(3, len(factors))
     num_rows = math.ceil(len(factors) / num_columns)
@@ -86,7 +86,7 @@ def _draw_continuous_marginal(ax, factor: FactorSpec, factor_samples: np.ndarray
     than a binned histogram. Falls back to a single line at the mean when the samples have
     no spread (KDE bandwidth is then undefined).
     """
-    range_low, range_high = factor.range[0]
+    range_low, range_high = factor.range
     sample_mean = float(np.mean(factor_samples))
     if float(np.std(factor_samples)) >= 1e-9:
         grid = np.linspace(range_low, range_high, 200)
